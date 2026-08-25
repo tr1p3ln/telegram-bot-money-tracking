@@ -1,0 +1,19 @@
+# Node Modules (Dependency)
+node_modules/
+
+# Environment Variables (Berisi Token & API Key)
+.env
+
+# Google Cloud Credentials (Sangat Rahasia)
+credentials.json
+creadential_key.txt
+cosmic-signer-*
+
+# Log Files (Opsional, bawaan Node.js)
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*credentials.json
+creadential_key.txt
+credentials.json
+creadential_key.txt
+.env
