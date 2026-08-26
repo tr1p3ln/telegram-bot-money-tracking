@@ -12,6 +12,14 @@ const userState = {};
 const bot = new Telegraf(process.env.TELEGRAM_TOKEN);
 const cron = require('node-cron');
 
+const express = require('express');
+const app = express();
+
+//untuk menerima request JSON dari webhook Telegram
+//yang memiliki fungsi untuk memproses data yang dikirimkan oleh Telegram ke server kita. Dengan menggunakan express.json(), kita dapat mengakses data yang dikirimkan dalam format JSON melalui req.body di route handler Express.
+app.use(express.json());
+
+
 // --- FUNGSI PEMBANTU UNTUK TAMPILAN PREVIEW ---
 function kirimPreviewStaging(ctx, chatId, data) {
   const teksPreview = `
@@ -539,13 +547,118 @@ cron.schedule('0 8 15 * *', async () => {
 // });
 
 // --- JALANKAN APLIKASI ---
+// async function startApp() {
+//   await initSheets();
+//   bot.launch();
+//   console.log('🤖 Bot Telegram berjalan, API siap!');
+// }
+// --- FITUR: LOKET WEBHOOK UNTUK N8N ---
+
+// Membuka jendela loket spesifik bernama "/webhook-pengeluaran"
+// (Diletakkan DI LUAR fungsi startApp)
+app.post('/webhook-pengeluaran', async (req, res) => {
+  
+  // 1. Membongkar paket yang dibawa oleh kurir n8n (berada di req.body)
+  const dataDariN8n = req.body;
+  const nominal = dataDariN8n.nominal;
+  const keterangan = dataDariN8n.keterangan;
+
+  //consoleloge 
+  console.log('[debug]📦 Paket diterima dari n8n:', dataDariN8n);
+
+  // 2. Validasi: Memastikan kurir tidak membawa paket kosong
+  if (!nominal || !keterangan) {
+    // Jika paket cacat, tolak kurir dengan status 400 (Bad Request)
+    return res.status(400).send({ error: 'Data nominal atau keterangan tidak ada!' });
+  }
+
+  try {
+    // 3. Membuka Buku Besar (Google Sheets)
+    const sheet = doc.sheetsByTitle['Transaksi'];
+    
+    // (BARIS VARIABEL GANDA DIHAPUS DARI SINI)
+    
+    const chatId = '1733545226'; // ID Telegram Anda
+    
+    // 4. Menyiapkan data persis seperti format yang biasa bot Anda pakai
+    const now = new Date();
+    const timestamp = now.toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' });
+    const bulan = `'${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const idTransaksi = Date.now().toString();
+
+    // Mengubah keterangan menjadi huruf kecil semua agar mudah dideteksi
+    const ket = keterangan.toLowerCase();
+    
+    // Setelan bawaan jika bot sama sekali tidak mengenali tokonya
+    let kategoriOtomatis = 'Lainnya'; 
+
+    // KAMUS PINTAR BOT
+    if (ket.includes('grab food') || ket.includes('gofood') || ket.includes('makan') || ket.includes('resto') || ket.includes('kopi')) {
+      kategoriOtomatis = 'Makanan';
+    } 
+    else if (ket.includes('yogya') || ket.includes('alfa') || ket.includes('indomaret') || ket.includes('mart') || ket.includes('belanja')) {
+      kategoriOtomatis = 'Belanja';
+    } 
+    else if (ket.includes('gojek') || ket.includes('grab') || ket.includes('bensin') || ket.includes('parkir')) {
+      kategoriOtomatis = 'Transportasi';
+    } 
+    else if (ket.includes('wifi') || ket.includes('listrik') || ket.includes('pln') || ket.includes('tagihan')) {
+      kategoriOtomatis = 'Tagihan';
+    }
+
+    const barisBaru = {
+      'ID': idTransaksi,
+      'Timestamp': timestamp,
+      'Bulan': bulan,
+      'Tipe': 'Pengeluaran',
+      'Kategori': kategoriOtomatis,
+      'Nominal': nominal,
+      'Keterangan': keterangan + ' (via Otomatisasi)',
+      'Sumber Input': 'Webhook/n8n',
+      'Chat ID': '1733545226'
+    };
+
+    // 5. Menyimpan data ke Sheets
+    await sheet.addRow(barisBaru);
+
+    // (BARIS RESPONSE GANDA DIHAPUS DARI SINI)
+
+    // 6. Mengirim pesan notifikasi ke Telegram
+    const pesanNotifikasi = 
+      `🔔 *PENGELUARAN OTOMATIS (EMAIL)* 🔔\n\n` +
+      `💸 *Nominal:* Rp ${Number(nominal).toLocaleString('id-ID')}\n` +
+      `📝 *Keterangan:* ${keterangan}\n\n` +
+      `✅ _Berhasil dicatat ke Google Sheets!_`;
+
+    await bot.telegram.sendMessage(chatId, pesanNotifikasi, { parse_mode: 'Markdown' });
+    console.log(`[DEBUG] Notifikasi terkirim ke Telegram untuk: ${keterangan}`);
+    
+    // 7. Mengirim nota konfirmasi (Response 200 OK) ke n8n cukup 1x saja di akhir
+    res.status(200).send('Sukses disimpan ke Sheets dan Telegram!');
+
+  } catch (error) {
+    console.error('Webhook Error:', error);
+    // Jika terjadi kebakaran di dalam kantor saat mencatat, beritahu n8n (Status 500 Internal Server Error)
+    res.status(500).send({ error: 'Gagal mencatat di server.' });
+  }
+});
+
+
+// --- JALANKAN APLIKASI ---
 async function startApp() {
   await initSheets();
   bot.launch();
+  
+  // Menginstruksikan Express untuk berjaga di Port 3000
+  app.listen(3000, () => {
+    console.log('🚪 Loket Webhook terbuka dan berjaga di Port 3000');
+  });
+
   console.log('🤖 Bot Telegram berjalan, API siap!');
 }
 
 startApp();
+
 
 process.once('SIGINT', () => bot.stop('SIGINT'));
 process.once('SIGTERM', () => bot.stop('SIGTERM'));
