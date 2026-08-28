@@ -1,0 +1,105 @@
+{
+  "name": "Bot Telegram",
+  "nodes": [
+    {
+      "parameters": {
+        "options": {
+          "customEmailConfig": "[[\"FROM\", \"youremail@gmail.com\"]]"
+        }
+      },
+      "type": "n8n-nodes-base.emailReadImap",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "6b909cac-94d2-4a26-9414-028d864ef2ba",
+      "name": "Email Trigger (IMAP)",
+      "credentials": {
+        "imap": {
+          "id": "bEv1cTkDoBFpB7Ha",
+          "name": "IMAP account 3"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst result = [];\n\nfor (const item of items) {\n  const text = item.json.textPlain || \"\";\n  \n  let nominal = 0;\n  let keterangan = \"Transaksi Jago\";\n\n  // POLA 1: Pembayaran Merchant (Contoh: GRAB FOOD)\n  if (text.includes(\"Jumlah\") && text.includes(\"Ke\")) {\n      const nominalMatch = text.match(/Jumlah\\s+Rp\\s*([\\d\\.]+)/);\n      if (nominalMatch) {\n          nominal = parseInt(nominalMatch[1].replace(/\\./g, ''));\n      }\n      const keMatch = text.match(/Ke\\s+([^\\r\\n]+)/);\n      if (keMatch) {\n          keterangan = keMatch[1].trim();\n      }\n  }\n  \n  // POLA 2: Penarikan Kantong (Contoh: sebesar Rp3.000 dari Kantong Tabung)\n  else if (text.includes(\"sebesar Rp\")) {\n      const nominalMatch = text.match(/sebesar\\s+Rp\\s*([\\d\\.]+)/);\n      if (nominalMatch) {\n          nominal = parseInt(nominalMatch[1].replace(/\\./g, ''));\n      }\n      const kantongMatch = text.match(/dari Kantong\\s+([^\\.]+)/);\n      if (kantongMatch) {\n          keterangan = \"Tarik Kantong \" + kantongMatch[1].trim();\n      }\n  }\n\n  // POLA 3: Pemindahan Antar Kantong (Contoh: Rp300.000 telah dipindahkan...)\n  else if (text.includes(\"telah dipindahkan dari Kantong\")) {\n      const nominalMatch = text.match(/Rp\\s*([\\d\\.]+)\\s+telah dipindahkan/);\n      if (nominalMatch) {\n          nominal = parseInt(nominalMatch[1].replace(/\\./g, ''));\n      }\n      const kantongMatch = text.match(/ke Kantong\\s+([^\\.]+)/);\n      if (kantongMatch) {\n          keterangan = \"Pindah ke Kantong \" + kantongMatch[1].trim();\n      }\n  }\n\n  // Memasukkan hasil ekstraksi ke dalam kotak paket baru\n  result.push({\n    json: {\n      nominal: nominal,\n      keterangan: keterangan\n    }\n  });\n}\n\nreturn result;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        208,
+        0
+      ],
+      "id": "be538b04-a853-4228-931a-5e77fb8575af",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3000/webhook-pengeluaran",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "nominal",
+              "value": "={{ $json.nominal }}"
+            },
+            {
+              "name": "keterangan",
+              "value": "={{ $json.keterangan }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        416,
+        0
+      ],
+      "id": "a7f2cbfc-16bc-4455-b44f-2c281681180d",
+      "name": "HTTP Request"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Email Trigger (IMAP)": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "2c416332-bf15-4c42-a0be-dc7a2dac3338",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "8bfa0fcc5b87653771004b24d79799d9779d553180f64f154a24ea459ff5cc4e"
+  },
+  "id": "9aZoFcIbyNWfYb0C",
+  "tags": []
+}
